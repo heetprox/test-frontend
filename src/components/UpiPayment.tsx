@@ -1,9 +1,12 @@
-"use client";
+'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { UniPayAPI } from '@/lib/api';
+import type { UpiInitiateResponse } from '@/types/api';
+import Link from 'next/link';
 import { ChevronDown, Search, X } from 'lucide-react';
 
-// Common Uniswap V4 tokens (you can expand this list)
+// Common Uniswap V4 tokens
 const UNISWAP_TOKENS = [
   {
     address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH (Wrapped Ethereum)
@@ -32,44 +35,10 @@ const UNISWAP_TOKENS = [
     name: 'Dai Stablecoin',
     decimals: 18,
     logoURI: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0x6B175474E89094C44Da98b954EedeAC495271d0F/logo.png'
-  },
-  {
-    address: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599', // WBTC
-    symbol: 'WBTC',
-    name: 'Wrapped BTC',
-    decimals: 8,
-    logoURI: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599/logo.png'
-  },
-  {
-    address: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', // UNI
-    symbol: 'UNI',
-    name: 'Uniswap',
-    decimals: 18,
-    logoURI: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984/logo.png'
-  },
-  {
-    address: '0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9', // AAVE
-    symbol: 'AAVE',
-    name: 'Aave Token',
-    decimals: 18,
-    logoURI: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9/logo.png'
-  },
-  {
-    address: '0x514910771AF9Ca656af840dff83E8264EcF986CA', // LINK
-    symbol: 'LINK',
-    name: 'ChainLink Token',
-    decimals: 18,
-    logoURI: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0x514910771AF9Ca656af840dff83E8264EcF986CA/logo.png'
   }
 ];
 
-// Note: For native ETH (not wrapped), you would typically use:
-// - address: '0x0000000000000000000000000000000000000000' or
-// - address: 'ETH' or 
-// - no address field at all
-// depending on your application's requirements
-
-// If you need native ETH as well:
+// Native ETH token
 const ETH_TOKEN = {
   address: '0x0000000000000000000000000000000000000000', // Common convention for native ETH
   symbol: 'ETH',
@@ -86,33 +55,24 @@ export interface Token {
   logoURI: string;
 }
 
-interface TokenInputProps {
-  value?: string;
-  onChange?: (value: string) => void;
-  onTokenSelect?: (token: Token) => void;
-  selectedToken?: Token;
-  placeholder?: string;
+interface UpiPaymentProps {
   disabled?: boolean;
 }
 
-const Input: React.FC<TokenInputProps> = ({
-  value = '',
-  onChange,
-  onTokenSelect,
-  selectedToken,
-  placeholder = '0.0',
-  disabled = false
-}) => {
+export default function UpiPayment({ disabled = false }: UpiPaymentProps) {
+  const [amount, setAmount] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [paymentData, setPaymentData] = useState<UpiInitiateResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedToken, setSelectedToken] = useState<Token>(ETH_TOKEN);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // Combine ETH with other tokens
-  const ALL_TOKENS = [ETH_TOKEN, ...UNISWAP_TOKENS];
-  const [filteredTokens, setFilteredTokens] = useState<Token[]>(ALL_TOKENS);
+  const [filteredTokens, setFilteredTokens] = useState<Token[]>([ETH_TOKEN, ...UNISWAP_TOKENS]);
   const modalRef = useRef<HTMLDivElement>(null);
 
   // Filter tokens based on search query
   useEffect(() => {
+    const ALL_TOKENS = [ETH_TOKEN, ...UNISWAP_TOKENS];
     const filtered = ALL_TOKENS.filter(token =>
       token.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
       token.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -139,7 +99,7 @@ const Input: React.FC<TokenInputProps> = ({
   }, [isModalOpen]);
 
   const handleTokenSelect = (token: Token) => {
-    onTokenSelect?.(token);
+    setSelectedToken(token);
     setIsModalOpen(false);
     setSearchQuery('');
   };
@@ -148,33 +108,77 @@ const Input: React.FC<TokenInputProps> = ({
     const inputValue = e.target.value;
     // Only allow numbers and decimals
     if (inputValue === '' || /^\d*\.?\d*$/.test(inputValue)) {
-      onChange?.(inputValue);
+      setAmount(inputValue);
     }
   };
-  
-  // Ensure the component is not in a disabled state by default
-  const isDisabled = disabled === true;
+
+  // Calculate INR amount based on token price (simplified example)
+  const getInrAmount = () => {
+    if (!amount || parseFloat(amount) <= 0) return '0';
+    
+    // Simplified conversion rates (in real app, these would come from an API)
+    const conversionRates: Record<string, number> = {
+      'ETH': 250000, // 1 ETH = 250,000 INR
+      'USDC': 85,    // 1 USDC = 85 INR
+      'USDT': 85,    // 1 USDT = 85 INR
+      'DAI': 85,     // 1 DAI = 85 INR
+      'WETH': 250000 // 1 WETH = 250,000 INR
+    };
+    
+    const rate = conversionRates[selectedToken.symbol] || 0;
+    const inrValue = parseFloat(amount) * rate;
+    return inrValue.toFixed(2);
+  };
+
+  const handleInitiatePayment = async () => {
+    if (!amount || parseFloat(amount) <= 0) {
+      setError('Please enter a valid amount');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Include token information in the payment request
+      const response = await UniPayAPI.initiateUpiPayment({ 
+        amount,
+        tokenSymbol: selectedToken.symbol,
+        tokenAddress: selectedToken.address
+      });
+      setPaymentData(response);
+      
+      // Store transaction ID and token info in localStorage for the success page
+      localStorage.setItem('upiTransactionId', response.transactionId);
+      localStorage.setItem('selectedTokenSymbol', selectedToken.symbol);
+      localStorage.setItem('selectedTokenAmount', amount);
+      
+      // Simulate UPI app redirect
+      window.location.href = response.intentUrl;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Payment initiation failed');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <>
-      <div className="w-full bg-[#1a1a1a] rounded-xl p-4 border border-gray-800 hover:border-white/30 transition-colors">
+    <div className="max-w-md mx-auto p-6 bg-white/10 backdrop-blur-md rounded-lg shadow-md">
+      <h2 className="text-2xl font-bold mb-4 text-white">UPI Payment</h2>
+      
+      <div className="w-full bg-[#1a1a1a] rounded-xl p-4 border border-gray-800 hover:border-white/30 transition-colors mb-4">
         <div className="flex items-center justify-between mb-2">
           <span className="text-white text-md">Amount</span>
-          {selectedToken && (
-            <span className="text-white text-md">
-              Balance: 0.00 {selectedToken.symbol}
-            </span>
-          )}
         </div>
         
         <div className="flex items-center gap-3">
           {/* Token Amount Input */}
           <input
             type="text"
-            value={value}
+            value={amount}
             onChange={handleInputChange}
-            placeholder={placeholder}
-            disabled={isDisabled}
+            placeholder="0.0"
+            disabled={disabled}
             className="flex-1 w-[20%] bg-transparent text-white text-5xl font-medium placeholder-white/50 outline-none"
           />
           
@@ -182,7 +186,7 @@ const Input: React.FC<TokenInputProps> = ({
           <button
             onClick={() => setIsModalOpen(true)}
             className="flex items-center gap-2 bg-white/10 hover:bg-white/15 px-3 py-2 rounded-full transition-colors border border-gray-700 hover:border-gray-600"
-            disabled={isDisabled}
+            disabled={disabled}
           >
             {selectedToken ? (
               <>
@@ -203,9 +207,39 @@ const Input: React.FC<TokenInputProps> = ({
           </button>
         </div>
       </div>
-          <div className="text-black cursor-pointer hover:bg-white/90 duration-300 text-xl bg-white text-center py-1 rounded-xl">Pay 4312₹</div>
+      
+      {/* INR Conversion Display */}
+      <div className="text-white text-center mb-4 p-2 bg-white/10 rounded-lg">
+        <span className="text-sm">Estimated Cost: </span>
+        <span className="font-bold">₹{getInrAmount()}</span>
+      </div>
 
+      {error && (
+        <div className="mb-4 p-3 bg-red-100/20 border border-red-400 text-red-200 rounded">
+          {error}
+        </div>
+      )}
 
+      <button
+        onClick={handleInitiatePayment}
+        disabled={loading || !amount || parseFloat(amount) <= 0}
+        className="w-full bg-[#9478FC] text-white py-2 px-4 rounded-md hover:bg-[#7d63d4] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
+      >
+        {loading ? 'Processing...' : `Pay ${amount} ${selectedToken.symbol} with UPI`}
+      </button>
+
+      {paymentData && (
+        <div className="mt-4 p-3 bg-green-100/20 border border-green-400 text-green-200 rounded">
+          <p className="font-medium">Payment Initiated</p>
+          <p className="text-sm">Transaction ID: {paymentData.transactionId}</p>
+          <div className="mt-2">
+            <Link href={`/payment/success?txId=${paymentData.transactionId}`} className="text-[#9478FC] hover:underline">
+              View Payment Status
+            </Link>
+          </div>
+        </div>
+      )}
+      
       {/* Token Selection Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -259,10 +293,6 @@ const Input: React.FC<TokenInputProps> = ({
                       <div className="text-white font-medium">{token.symbol}</div>
                       <div className="text-white text-sm">{token.name}</div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-white">0.00</div>
-                      <div className="text-white text-sm">$0.00</div>
-                    </div>
                   </button>
                 ))
               ) : (
@@ -275,8 +305,6 @@ const Input: React.FC<TokenInputProps> = ({
           </div>
         </div>
       )}
-    </>
+    </div>
   );
-};
-
-export default Input;
+}

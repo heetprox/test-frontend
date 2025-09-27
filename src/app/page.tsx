@@ -1,32 +1,22 @@
 'use client'
 
-import Input from "@/components/Input";
-import Image from "next/image";
-import { useState } from "react";
-import { Token } from "@/components/Input";
+import UpiPayment from "@/components/UpiPayment";
+import SimpleButton from "@/components/SimpleButton";
 
 export default function Home() {
-  const [inputValue, setInputValue] = useState('');
-  const [selectedToken, setSelectedToken] = useState<Token | undefined>();
-
-  const handleTokenSelect = (token: Token) => {
-    setSelectedToken(token);
-  };
-
-  const handleInputChange = (value: string) => {
-    setInputValue(value);
-  };
-
   return (
-   <div className="w-full h-full min-h-screen flex flex-col items-center justify-center">
-    <div className="flex flex-col w-full max-w-md">
-      <div className="text-4xl text-white b-font text-center">Invest in Crypto with Just a UPI Payments{"."}</div>
-      <Input 
-        value={inputValue}
-        onChange={handleInputChange}
-        onTokenSelect={handleTokenSelect}
-        selectedToken={selectedToken}
-      />
+   <div className="w-full h-full min-h-screen flex flex-col items-center justify-center bg-black">
+    <div className="flex gap-8 flex-col w-full max-w-md">
+      <div className="text-4xl text-white b-font text-center">Get Your Crypto</div>
+      
+      {/* UPI Payment Component */}
+      <UpiPayment />
+      
+      <div className="flex justify-center space-x-4 mt-4">
+        <SimpleButton title="Check Transaction Status" href="/payment/success" />
+        <SimpleButton title="Claim Tokens" href="/claim" />
+        <SimpleButton title="System Health" href="/health" />
+      </div>
     </div>
    </div>
   );
