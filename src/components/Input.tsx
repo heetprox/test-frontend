@@ -203,6 +203,8 @@ const Input: React.FC<TokenInputProps> = ({
           </button>
         </div>
       </div>
+          <div className="text-black cursor-pointer hover:bg-white/90 duration-300 text-xl bg-white text-center py-1 rounded-md">Pay with UPI</div>
+
 
       {/* Token Selection Modal */}
       {isModalOpen && (
